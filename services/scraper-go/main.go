@@ -1,6 +1,7 @@
 package main
 
 import (
+	"crypto/tls"
 	"encoding/json"
 	"log"
 	"os"
@@ -34,10 +35,26 @@ func main() {
 		kafkaTopic = "raw-articles"
 	}
 
+	kafkaUser := os.Getenv("KAFKA_USER")
+	kafkaPassword := os.Getenv("KAFKA_PASSWORD")
+
 	targetFeeds := GetTargetFeeds()
 
 	config := sarama.NewConfig()
 	config.Producer.Return.Successes = true
+
+	// Dynamically attach TLS & SASL/PLAIN if cloud credentials are present (Aiven)
+	if kafkaUser != "" && kafkaPassword != "" {
+		config.Net.SASL.Enable = true
+		config.Net.SASL.User = kafkaUser
+		config.Net.SASL.Password = kafkaPassword
+		config.Net.SASL.Mechanism = sarama.SASLTypePlaintext
+
+		config.Net.TLS.Enable = true
+		config.Net.TLS.Config = &tls.Config{
+			InsecureSkipVerify: true,
+		}
+	}
 
 	producer, err := sarama.NewSyncProducer([]string{kafkaBroker}, config)
 	if err != nil {

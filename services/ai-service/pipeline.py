@@ -15,17 +15,32 @@ load_dotenv(dotenv_path="../../.env")
 # 2. Extract Configuration
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 DB_URI = os.getenv("DB_URI")
+
+# Kafka Configs
 KAFKA_BROKER = os.getenv("KAFKA_BROKER", "127.0.0.1:9092")
 KAFKA_TOPIC = os.getenv("KAFKA_TOPIC", "raw-articles")
+KAFKA_USER = os.getenv("KAFKA_USER")
+KAFKA_PASSWORD = os.getenv("KAFKA_PASSWORD")
+
+# Qdrant Configs
 QDRANT_HOST = os.getenv("QDRANT_HOST", "127.0.0.1")
 QDRANT_PORT = int(os.getenv("QDRANT_PORT", 6333))
+QDRANT_API_KEY = os.getenv("QDRANT_API_KEY")
 COLLECTION_NAME = os.getenv("QDRANT_COLLECTION", "news_articles")
 SIMILARITY_THRESHOLD = float(os.getenv("SIMILARITY_THRESHOLD", 0.82))
+
+
+
 
 # 3. Initialize Embedding Model & Vector Client
 print("Loading MiniLM Embedding Model...")
 embedder = SentenceTransformer("all-MiniLM-L6-v2")
-qdrant = QdrantClient(host=QDRANT_HOST, port=QDRANT_PORT)
+
+# Support both Qdrant Cloud (HTTPS + API Key) and Local Docker
+if QDRANT_HOST.startswith("http://") or QDRANT_HOST.startswith("https://"):
+    qdrant = QdrantClient(url=QDRANT_HOST, api_key=QDRANT_API_KEY)
+else:
+    qdrant = QdrantClient(host=QDRANT_HOST, port=QDRANT_PORT, api_key=QDRANT_API_KEY)
 
 # Ensure Qdrant Collection Exists
 collections = [c.name for c in qdrant.get_collections().collections]
@@ -39,15 +54,25 @@ if COLLECTION_NAME not in collections:
 # 4. Initialize Database Connection Once
 conn = psycopg2.connect(DB_URI)
 
-# 5. Initialize Kafka Consumer
-consumer = KafkaConsumer(
-    KAFKA_TOPIC,
-    bootstrap_servers=[KAFKA_BROKER],
-    auto_offset_reset="earliest",
-    enable_auto_commit=True,
-    group_id="ai-pipeline-group",
-    value_deserializer=lambda m: json.loads(m.decode("utf-8")),
-)
+# 5. Initialize Kafka Consumer with Conditional Security (Local vs Cloud Aiven)
+kafka_kwargs = {
+    "bootstrap_servers": [KAFKA_BROKER],
+    "auto_offset_reset": "earliest",
+    "enable_auto_commit": True,
+    "group_id": "ai-pipeline-group",
+    "value_deserializer": lambda m: json.loads(m.decode("utf-8")),
+}
+
+# Attach SASL_SSL credentials only if KAFKA_USER is present (Aiven)
+if KAFKA_USER and KAFKA_PASSWORD:
+    kafka_kwargs.update({
+        "security_protocol": "SASL_SSL",
+        "sasl_mechanism": "PLAIN",
+        "sasl_plain_username": KAFKA_USER,
+        "sasl_plain_password": KAFKA_PASSWORD,
+    })
+
+consumer = KafkaConsumer(KAFKA_TOPIC, **kafka_kwargs)
 
 print(f"\n🚀 News Intelligence Pipeline Active. Listening on {KAFKA_TOPIC}...\n")
 
@@ -82,11 +107,6 @@ for message in consumer:
         # Link to existing event cluster
         cluster_id = search_results[0].payload.get("cluster_id")
         print(f"[CLUSTERED] Linked to cluster {cluster_id[:8]}... -> {title[:50]}")
-        
-        cur.execute(
-            "UPDATE event_clusters SET article_count = article_count + 1 WHERE id = %s",
-            (cluster_id,)
-        )
     else:
         # Create brand-new event cluster
         cluster_id = str(uuid.uuid4())

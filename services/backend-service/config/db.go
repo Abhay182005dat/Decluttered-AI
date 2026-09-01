@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"log"
+	"os"
 
 	_ "github.com/lib/pq"
 	"github.com/redis/go-redis/v9"
@@ -18,8 +19,9 @@ var (
 func InitConnections() {
 	var err error
 
-	// Connect to PostgreSQL
-	connStr := "postgresql://postgres:Abhi%40sonda31@127.0.0.1:5432/decluttered_db?sslmode=disable"
+	// 1. PostgreSQL Setup (Dynamic DB_URI reading)
+	connStr := os.Getenv("DB_URI")
+
 	DB, err = sql.Open("postgres", connStr)
 	if err != nil {
 		log.Fatalf("PostgreSQL connection error: %v", err)
@@ -28,18 +30,33 @@ func InitConnections() {
 	if err = DB.Ping(); err != nil {
 		log.Fatalf("PostgreSQL ping failed: %v", err)
 	}
-	log.Println("Connected to PostgreSQL successfully.")
+	log.Println("✓ Connected to PostgreSQL successfully.")
 
-	// Connect to Redis
-	RDB = redis.NewClient(&redis.Options{
-		Addr: "127.0.0.1:6379",
-		Password: "", // no password set
-		DB:       0,  // use default DB
-	})
+	// 2. Redis Setup (Supports both local redis:// and Upstash rediss:// TLS)
+	redisURL := os.Getenv("REDIS_URL")
+	var rdbOptions *redis.Options
+
+	if redisURL != "" {
+		// Parse rediss:// or redis:// URI strings
+		opt, parseErr := redis.ParseURL(redisURL)
+		if parseErr != nil {
+			log.Fatalf("Failed to parse REDIS_URL: %v", parseErr)
+		}
+		rdbOptions = opt
+	} else {
+		// Fallback to local unauthenticated Redis
+		rdbOptions = &redis.Options{
+			Addr:     "127.0.0.1:6379",
+			Password: "",
+			DB:       0,
+		}
+	}
+
+	RDB = redis.NewClient(rdbOptions)
 
 	_, err = RDB.Ping(Ctx).Result()
 	if err != nil {
 		log.Fatalf("Redis connection failed: %v", err)
 	}
-	log.Println("Connected to Redis successfully.")
+	log.Println("✓ Connected to Redis successfully.")
 }

@@ -7,6 +7,7 @@ import (
 	"decluttered/backend/handlers"
 
 	"github.com/gin-gonic/gin"
+	"github.com/joho/godotenv"
 )
 
 // CORS Middleware
@@ -18,7 +19,7 @@ func CORSMiddleware() gin.HandlerFunc {
 		c.Writer.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS, GET, PUT, DELETE")
 
 		if c.Request.Method == "OPTIONS" {
-			c.AbortWithStatus(24)
+			c.AbortWithStatus(204)
 			return
 		}
 
@@ -27,6 +28,11 @@ func CORSMiddleware() gin.HandlerFunc {
 }
 
 func main() {
+	if err := godotenv.Load("../../.env"); err != nil {
+		if err := godotenv.Load(); err != nil {
+			log.Println("No .env file found, relying on system environment variables.")
+		}
+	}
 	config.InitConnections()
 
 	r := gin.Default()
