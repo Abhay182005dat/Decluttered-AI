@@ -71,12 +71,19 @@ if COLLECTION_NAME not in collections:
 conn = psycopg2.connect(DB_URI)
 
 # 5. Initialize Kafka Consumer with Conditional Security (Local vs Cloud Aiven)
+import ssl 
+from kafka import KafkaConsumer
+
+ssl_context = ssl.create_default_context()
+ssl_context.check_hostname = False
+ssl_context.verify_mode = ssl.CERT_NONE
 kafka_kwargs = {
     "bootstrap_servers": [KAFKA_BROKER],
     "auto_offset_reset": "earliest",
     "enable_auto_commit": True,
     "group_id": "ai-pipeline-group",
     "value_deserializer": lambda m: json.loads(m.decode("utf-8")),
+    'ssl_context' : ssl_context
 }
 
 # Attach SASL_SSL credentials only if KAFKA_USER is present (Aiven)
