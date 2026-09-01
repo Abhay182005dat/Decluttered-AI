@@ -2,11 +2,11 @@
 
 import { useEffect, useState, useMemo } from "react";
 import { ChevronRight, Clock, Layers, RefreshCw } from "lucide-react";
-import { EventCluster, EventDetail } from "@/types/news";
-import { fetchNewsFeed, fetchEventDetail } from "@/lib/api";
-import { Header } from "@/components/Header";
-import { Sidebar } from "@/components/Sidebar";
-import { SummaryDetail } from "@/components/SummaryDetail";
+import { EventCluster, EventDetail } from "../types/news";
+import { fetchNewsFeed, fetchEventDetail } from "../lib/api";
+import { Header } from "../components/Header";
+import { Sidebar } from "../components/Sidebar";
+import { SummaryDetail } from "../components/SummaryDetail";
 
 export default function Home() {
   const [feed, setFeed] = useState<EventCluster[]>([]);
