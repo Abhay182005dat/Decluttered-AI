@@ -13,7 +13,19 @@ from http.server import HTTPServer, BaseHTTPRequestHandler
 
 # 1. Load Root .env
 load_dotenv(dotenv_path="../../.env")
+# Minimal HTTP Server to satisfy Render Free Web Service health checks
+class HealthCheckHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.end_headers()
+        self.wfile.write(b"AI Pipeline Active")
 
+def run_health_check_server():
+    port = int(os.getenv("PORT", 10000))
+    server = HTTPServer(("0.0.0.0", port), HealthCheckHandler)
+    server.serve_forever()
+
+    
 # 2. Extract Configuration
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 DB_URI = os.getenv("DB_URI")
@@ -31,19 +43,6 @@ QDRANT_API_KEY = os.getenv("QDRANT_API_KEY")
 COLLECTION_NAME = os.getenv("QDRANT_COLLECTION", "news_articles")
 SIMILARITY_THRESHOLD = float(os.getenv("SIMILARITY_THRESHOLD", 0.82))
 
-
-
-# Minimal HTTP Server to satisfy Render Free Web Service health checks
-class HealthCheckHandler(BaseHTTPRequestHandler):
-    def do_GET(self):
-        self.send_response(200)
-        self.end_headers()
-        self.wfile.write(b"AI Pipeline Active")
-
-def run_health_check_server():
-    port = int(os.getenv("PORT", 10000))
-    server = HTTPServer(("0.0.0.0", port), HealthCheckHandler)
-    server.serve_forever()
 
 # Start HTTP server on a daemon thread
 threading.Thread(target=run_health_check_server, daemon=True).start()
