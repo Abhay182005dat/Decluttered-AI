@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { ChevronRight, Clock, Layers, RefreshCw } from "lucide-react";
 import { EventCluster, EventDetail } from "@/types/news";
 import { fetchNewsFeed, fetchEventDetail } from "@/lib/api";
 import { Header } from "@/components/Header";
+import { Sidebar } from "@/components/Sidebar";
 import { SummaryDetail } from "@/components/SummaryDetail";
 
 export default function Home() {
@@ -13,6 +14,10 @@ export default function Home() {
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
   const [eventDetail, setEventDetail] = useState<EventDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
+
+  // Sidebar Controls
+  const [selectedCategory, setSelectedCategory] = useState<string>("ALL");
+  const [searchQuery, setSearchQuery] = useState<string>("");
 
   const loadFeed = async () => {
     setLoading(true);
@@ -48,65 +53,103 @@ export default function Home() {
     }
   };
 
+  // Filter feed based on sidebar category & search input
+  const filteredFeed = useMemo(() => {
+    return feed.filter((item) => {
+      const matchesCategory =
+        selectedCategory === "ALL" ||
+        item.category.toLowerCase() === selectedCategory.toLowerCase();
+      
+      const matchesSearch =
+        item.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (item.summary?.what_happened &&
+          item.summary.what_happened.toLowerCase().includes(searchQuery.toLowerCase()));
+
+      return matchesCategory && matchesSearch;
+    });
+  }, [feed, selectedCategory, searchQuery]);
+
   return (
     <div className="min-h-screen bg-[#0d0e11] text-[#c9d1d9] font-mono text-sm antialiased">
       <Header loading={loading} onRefresh={loadFeed} />
 
-      <main className="max-w-5xl mx-auto px-4 py-6">
-        {loading ? (
-          <div className="py-20 text-center text-[#8b949e] flex flex-col items-center gap-3">
-            <RefreshCw className="w-6 h-6 animate-spin text-[#ff6600]" />
-            <span>Fetching cluster streams...</span>
-          </div>
-        ) : (
-          <div className="space-y-3">
-            {feed.map((item, idx) => {
-              const isExpanded = selectedEventId === item.id;
-              return (
-                <div
-                  key={item.id}
-                  className={`border rounded-lg transition-all ${
-                    isExpanded ? "border-[#ff6600] bg-[#161b22]" : "border-[#21262d] bg-[#0d0e11] hover:border-[#30363d]"
-                  }`}
-                >
+      <div className="max-w-7xl mx-auto flex">
+        <Sidebar
+          selectedCategory={selectedCategory}
+          onSelectCategory={setSelectedCategory}
+          searchQuery={searchQuery}
+          onSearchChange={setSearchQuery}
+        />
+
+        {/* Main Feed View */}
+        <main className="flex-1 p-6">
+          {loading ? (
+            <div className="py-20 text-center text-[#8b949e] flex flex-col items-center gap-3">
+              <RefreshCw className="w-6 h-6 animate-spin text-[#ff6600]" />
+              <span>Fetching cluster streams...</span>
+            </div>
+          ) : filteredFeed.length === 0 ? (
+            <div className="py-20 text-center text-[#8b949e] border border-dashed border-[#21262d] rounded-lg">
+              No intelligence clusters matched your filter criteria.
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {filteredFeed.map((item, idx) => {
+                const isExpanded = selectedEventId === item.id;
+                return (
                   <div
-                    onClick={() => handleSelectEvent(item.id)}
-                    className="p-4 cursor-pointer flex items-start gap-3"
+                    key={item.id}
+                    className={`border rounded-lg transition-all ${
+                      isExpanded
+                        ? "border-[#ff6600] bg-[#161b22]"
+                        : "border-[#21262d] bg-[#0d0e11] hover:border-[#30363d]"
+                    }`}
                   >
-                    <span className="text-[#8b949e] text-xs w-6 text-right font-bold pt-0.5">
-                      {idx + 1}.
-                    </span>
+                    <div
+                      onClick={() => handleSelectEvent(item.id)}
+                      className="p-4 cursor-pointer flex items-start gap-3"
+                    >
+                      <span className="text-[#8b949e] text-xs w-6 text-right font-bold pt-0.5">
+                        {idx + 1}.
+                      </span>
 
-                    <div className="flex-1 space-y-1">
-                      <h2 className="text-white font-medium hover:text-[#ff6600] transition-colors text-base leading-snug">
-                        {item.title}
-                      </h2>
+                      <div className="flex-1 space-y-1">
+                        <h2 className="text-white font-medium hover:text-[#ff6600] transition-colors text-base leading-snug">
+                          {item.title}
+                        </h2>
 
-                      <div className="flex items-center gap-3 text-xs text-[#8b949e] pt-1">
-                        <span className="bg-[#21262d] text-[#c9d1d9] px-2 py-0.5 rounded text-[11px] font-sans uppercase font-semibold">
-                          {item.category}
-                        </span>
-                        <span className="flex items-center gap-1">
-                          <Layers className="w-3 h-3 text-[#ff6600]" />
-                          {item.article_count} {item.article_count === 1 ? "source" : "sources"}
-                        </span>
-                        <span className="flex items-center gap-1">
-                          <Clock className="w-3 h-3" />
-                          {new Date(item.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-                        </span>
+                        <div className="flex items-center gap-3 text-xs text-[#8b949e] pt-1">
+                          <span className="bg-[#21262d] text-[#c9d1d9] px-2 py-0.5 rounded text-[11px] font-sans uppercase font-semibold">
+                            {item.category}
+                          </span>
+                          <span className="flex items-center gap-1">
+                            <Layers className="w-3 h-3 text-[#ff6600]" />
+                            {item.article_count} {item.article_count === 1 ? "source" : "sources"}
+                          </span>
+                          <span className="flex items-center gap-1">
+                            <Clock className="w-3 h-3" />
+                            {new Date(item.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                          </span>
+                        </div>
                       </div>
+
+                      <ChevronRight
+                        className={`w-5 h-5 text-[#8b949e] transition-transform ${
+                          isExpanded ? "rotate-90 text-[#ff6600]" : ""
+                        }`}
+                      />
                     </div>
 
-                    <ChevronRight className={`w-5 h-5 text-[#8b949e] transition-transform ${isExpanded ? "rotate-90 text-[#ff6600]" : ""}`} />
+                    {isExpanded && (
+                      <SummaryDetail item={item} detail={eventDetail} loading={detailLoading} />
+                    )}
                   </div>
-
-                  {isExpanded && <SummaryDetail item={item} detail={eventDetail} loading={detailLoading} />}
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </main>
+                );
+              })}
+            </div>
+          )}
+        </main>
+      </div>
     </div>
   );
 }

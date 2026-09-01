@@ -38,6 +38,7 @@ func main() {
 	{
 		v1.GET("/feed", handlers.GetNewsFeed)
 		v1.GET("/events/:id", handlers.GetEventByID)
+		v1.GET("/market", handlers.GetMarketData)
 	}
 
 	log.Println("Starting Go Backend API Server on port 8080...")

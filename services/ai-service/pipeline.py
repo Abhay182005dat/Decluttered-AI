@@ -1,28 +1,33 @@
+import os
 import json
 import uuid
-import os
 import psycopg2
+from dotenv import load_dotenv
 from kafka import KafkaConsumer
 from sentence_transformers import SentenceTransformer
 from qdrant_client import QdrantClient
-from qdrant_client.http.models import PointStruct
+from qdrant_client.http.models import PointStruct, Distance, VectorParams
 from summarizer import generate_event_summary
-from qdrant_client.http.models import Distance, VectorParams
-from dotenv import load_dotenv
 
-# Load environment variables from .env file
-load_dotenv()
+# 1. Load Root .env
+load_dotenv(dotenv_path="../../.env")
 
-# 1. Configuration & Credentials
+# 2. Extract Configuration
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 DB_URI = os.getenv("DB_URI")
+KAFKA_BROKER = os.getenv("KAFKA_BROKER", "127.0.0.1:9092")
+KAFKA_TOPIC = os.getenv("KAFKA_TOPIC", "raw-articles")
+QDRANT_HOST = os.getenv("QDRANT_HOST", "127.0.0.1")
+QDRANT_PORT = int(os.getenv("QDRANT_PORT", 6333))
+COLLECTION_NAME = os.getenv("QDRANT_COLLECTION", "news_articles")
+SIMILARITY_THRESHOLD = float(os.getenv("SIMILARITY_THRESHOLD", 0.82))
 
-# 2. Initialize Embedder & Qdrant Client
+# 3. Initialize Embedding Model & Vector Client
 print("Loading MiniLM Embedding Model...")
 embedder = SentenceTransformer("all-MiniLM-L6-v2")
-qdrant = QdrantClient(host=os.getenv("QDRANT_HOST"), port=int(os.getenv("QDRANT_PORT")))
-COLLECTION_NAME = os.getenv("QDRANT_COLLECTION")
+qdrant = QdrantClient(host=QDRANT_HOST, port=QDRANT_PORT)
 
+# Ensure Qdrant Collection Exists
 collections = [c.name for c in qdrant.get_collections().collections]
 if COLLECTION_NAME not in collections:
     qdrant.create_collection(
@@ -31,17 +36,20 @@ if COLLECTION_NAME not in collections:
     )
     print(f"Created Qdrant Collection: {COLLECTION_NAME}")
 
-# 3. Setup Kafka Consumer
+# 4. Initialize Database Connection Once
+conn = psycopg2.connect(DB_URI)
+
+# 5. Initialize Kafka Consumer
 consumer = KafkaConsumer(
-    os.getenv("KAFKA_TOPIC"),
-    bootstrap_servers=[os.getenv("KAFKA_BROKER")],
-    auto_offset_reset="earliest",  # Pick up all articles from the topic
+    KAFKA_TOPIC,
+    bootstrap_servers=[KAFKA_BROKER],
+    auto_offset_reset="earliest",
     enable_auto_commit=True,
     group_id="ai-pipeline-group",
     value_deserializer=lambda m: json.loads(m.decode("utf-8")),
 )
 
-print("\n🚀 News Intelligence Pipeline Active. Listening for articles...\n")
+print(f"\n🚀 News Intelligence Pipeline Active. Listening on {KAFKA_TOPIC}...\n")
 
 for message in consumer:
     article = message.value
@@ -50,23 +58,28 @@ for message in consumer:
     url = article.get("source_url", "")
     source = article.get("source_name", "Unknown")
 
-    # Generate 384-d vector embedding
+    if not url or not title:
+        continue
+
+    # Generate 384-dimensional dense vector
     vector = embedder.encode(f"{title}. {content[:300]}").tolist()
 
-    # Query Qdrant for semantic similarity (Vector Search)
-    similarity_threshold = float(os.getenv("SIMILARITY_THRESHOLD", 0.82))
+    # Query Qdrant for semantic similarity
     search_results = qdrant.search(
         collection_name=COLLECTION_NAME,
         query_vector=vector,
         limit=1,
-        score_threshold=similarity_threshold,
+        score_threshold=SIMILARITY_THRESHOLD,
     )
 
-    conn = psycopg2.connect(DB_URI)
+    # Reconnect to DB if session dropped
+    if conn.closed != 0:
+        conn = psycopg2.connect(DB_URI)
+
     cur = conn.cursor()
 
     if search_results:
-        # Article belongs to an existing event cluster
+        # Link to existing event cluster
         cluster_id = search_results[0].payload.get("cluster_id")
         print(f"[CLUSTERED] Linked to cluster {cluster_id[:8]}... -> {title[:50]}")
         
@@ -75,22 +88,20 @@ for message in consumer:
             (cluster_id,)
         )
     else:
-        # Article represents a brand-new news event
+        # Create brand-new event cluster
         cluster_id = str(uuid.uuid4())
         print(f"[NEW EVENT] Created cluster {cluster_id[:8]}... -> {title[:50]}")
 
-        # Insert new Cluster record
         cur.execute(
             "INSERT INTO event_clusters (id, title, category) VALUES (%s, %s, %s)",
-            (cluster_id, title, article.get("category", "General"))
+            (cluster_id, title, article.get("category", "Technology"))
         )
 
-        # Generate 4-part AI Summary via Groq
-        print("Calling Groq LLM for news summary...")
+        # Generate 4-part AI summary via Groq LLM
+        print("  └─ Calling Groq LLM for news summary...")
         try:
             summary_data = generate_event_summary(f"{title}\n\n{content}", GROQ_API_KEY)
 
-            # Persist Summary to Postgres
             cur.execute(
                 """INSERT INTO summaries (cluster_id, what_happened, why_it_happened, latest_updates, why_it_matters)
                    VALUES (%s, %s, %s, %s, %s)""",
@@ -103,17 +114,26 @@ for message in consumer:
                 )
             )
         except Exception as e:
-            print(f"Failed to generate summary: {e}")
+            print(f"  └─ ⚠️ Failed to generate summary: {e}")
 
-    # Insert Raw Article into Postgres
+    # 1. Insert Raw Article into Postgres (skip duplicates using ON CONFLICT)
     article_id = str(uuid.uuid5(uuid.NAMESPACE_URL, url))
     cur.execute(
         """INSERT INTO articles (id, source_name, source_url, title, content, cluster_id)
-           VALUES (%s, %s, %s, %s, %s, %s) ON CONFLICT (source_url) DO NOTHING""",
+        VALUES (%s, %s, %s, %s, %s, %s) 
+        ON CONFLICT (source_url) DO NOTHING""",
         (article_id, source, url, title, content, cluster_id)
     )
 
-    # Upsert Article vector to Qdrant
+    # 2. Recalculate the exact distinct source count from the articles table
+    cur.execute(
+        """UPDATE event_clusters 
+        SET article_count = (SELECT COUNT(*) FROM articles WHERE cluster_id = %s)
+        WHERE id = %s""",
+        (cluster_id, cluster_id)
+    )
+
+    # Upsert vector into Qdrant
     qdrant.upsert(
         collection_name=COLLECTION_NAME,
         points=[
@@ -127,6 +147,5 @@ for message in consumer:
 
     conn.commit()
     cur.close()
-    conn.close()
 
-    print(f"Database write complete.\n")
+    print(f"  ✓ Database write complete.\n")

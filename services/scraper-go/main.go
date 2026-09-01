@@ -1,18 +1,15 @@
 package main
 
 import (
-	"context"
 	"encoding/json"
-	"fmt"
 	"log"
-	"net"
 	"os"
-	"strconv"
+	"sync"
 	"time"
 
+	"github.com/IBM/sarama"
 	"github.com/joho/godotenv"
 	"github.com/mmcdole/gofeed"
-	"github.com/segmentio/kafka-go"
 )
 
 type ArticlePayload struct {
@@ -24,119 +21,97 @@ type ArticlePayload struct {
 	PublishedAt time.Time `json:"published_at"`
 }
 
-func ensureTopic(brokerAddr, topic string) {
-	conn, err := kafka.Dial("tcp", brokerAddr)
-	if err != nil {
-		log.Fatalf("Failed to dial broker: %v", err)
-	}
-	defer conn.Close()
-
-	controller, err := conn.Controller()
-	if err != nil {
-		log.Fatalf("Failed to get controller: %v", err)
-	}
-
-	controllerConn, err := kafka.Dial("tcp", net.JoinHostPort(controller.Host, strconv.Itoa(controller.Port)))
-	if err != nil {
-		log.Fatalf("Failed to connect to controller: %v", err)
-	}
-	defer controllerConn.Close()
-
-	topicConfigs := []kafka.TopicConfig{
-		{
-			Topic:             topic,
-			NumPartitions:     1,
-			ReplicationFactor: 1,
-		},
-	}
-
-	err = controllerConn.CreateTopics(topicConfigs...)
-	if err != nil {
-		log.Printf("Topic creation note (may already exist): %v", err)
-	} else {
-		fmt.Printf("Ensured topic '%s' exists\n", topic)
-	}
-}
-
 func main() {
-	// Load environment variables from .env file
-	err := godotenv.Load("../../.env")
+	_ = godotenv.Load("../../.env")
+
+	kafkaBroker := os.Getenv("KAFKA_BROKER")
+	if kafkaBroker == "" {
+		kafkaBroker = "127.0.0.1:9092"
+	}
+
+	kafkaTopic := os.Getenv("KAFKA_TOPIC")
+	if kafkaTopic == "" {
+		kafkaTopic = "raw-articles"
+	}
+
+	targetFeeds := GetTargetFeeds()
+
+	config := sarama.NewConfig()
+	config.Producer.Return.Successes = true
+
+	producer, err := sarama.NewSyncProducer([]string{kafkaBroker}, config)
 	if err != nil {
-		log.Printf("Warning: Could not load .env file: %v", err)
+		log.Fatalf("Failed to start Kafka producer: %v", err)
 	}
+	defer producer.Close()
 
-	brokerAddr := os.Getenv("KAFKA_BROKER")
-	if brokerAddr == "" {
-		brokerAddr = "127.0.0.1:9092"
-	}
+	log.Printf("🚀 Multi-Source Scraper Active. Ingesting %d feeds via Kafka [%s]...\n", len(targetFeeds), kafkaTopic)
 
-	topicName := os.Getenv("KAFKA_TOPIC")
-	if topicName == "" {
-		topicName = "raw-articles"
-	}
+	var wg sync.WaitGroup
+	articleChan := make(chan ArticlePayload, 100)
 
-	rssFeedURL := os.Getenv("RSS_FEED_URL")
-	if rssFeedURL == "" {
-		rssFeedURL = "https://techcrunch.com/feed/"
-	}
+	go func() {
+		for article := range articleChan {
+			bytes, err := json.Marshal(article)
+			if err != nil {
+				continue
+			}
 
-	// 1. Automatically create topic if missing
-	ensureTopic(brokerAddr, topicName)
+			msg := &sarama.ProducerMessage{
+				Topic: kafkaTopic,
+				Value: sarama.ByteEncoder(bytes),
+			}
 
-	// 2. Initialize Kafka Writer with AutoTopic creation flag
-	kafkaWriter := &kafka.Writer{
-		Addr:                   kafka.TCP(brokerAddr),
-		Topic:                  topicName,
-		Balancer:               &kafka.LeastBytes{},
-		AllowAutoTopicCreation: true,
-	}
-	defer kafkaWriter.Close()
+			_, _, err = producer.SendMessage(msg)
+			if err != nil {
+				log.Printf("⚠️ Failed to publish article [%s]: %v", article.Title, err)
+			} else {
+				log.Printf("✓ [KAFKA PUB] [%s] %s", article.SourceName, article.Title)
+			}
+		}
+	}()
 
-	// 3. Parse RSS Feed
 	fp := gofeed.NewParser()
-	feed, err := fp.ParseURL(rssFeedURL)
-	if err != nil {
-		log.Fatalf("Failed to fetch RSS feed: %v", err)
+
+	for _, feed := range targetFeeds {
+		wg.Add(1)
+		go func(f FeedConfig) {
+			defer wg.Done()
+			log.Printf("Fetching stream: %s (%s)", f.Name, f.URL)
+
+			parsedFeed, err := fp.ParseURL(f.URL)
+			if err != nil {
+				log.Printf("❌ Failed to scrape [%s]: %v", f.Name, err)
+				return
+			}
+
+			for _, item := range parsedFeed.Items {
+				content := item.Description
+				if item.Content != "" {
+					content = item.Content
+				}
+
+				pubDate := time.Now()
+				if item.PublishedParsed != nil {
+					pubDate = *item.PublishedParsed
+				}
+
+				payload := ArticlePayload{
+					SourceName:  f.Name,
+					SourceURL:   item.Link,
+					Title:       item.Title,
+					Content:     content,
+					Category:    f.Category,
+					PublishedAt: pubDate,
+				}
+
+				articleChan <- payload
+			}
+		}(feed)
 	}
 
-	fmt.Printf("Fetched %d articles from %s\n", len(feed.Items), feed.Title)
+	wg.Wait()
+	close(articleChan)
 
-	// 4. Publish items to Kafka
-	for _, item := range feed.Items {
-		content := item.Content
-		if content == "" {
-			content = item.Description
-		}
-
-		pubDate := time.Now()
-		if item.PublishedParsed != nil {
-			pubDate = *item.PublishedParsed
-		}
-
-		payload := ArticlePayload{
-			SourceName:  "TechCrunch",
-			SourceURL:   item.Link,
-			Title:       item.Title,
-			Content:     content,
-			Category:    "Technology",
-			PublishedAt: pubDate,
-		}
-
-		jsonBytes, err := json.Marshal(payload)
-		if err != nil {
-			log.Printf("Error marshaling payload: %v", err)
-			continue
-		}
-
-		err = kafkaWriter.WriteMessages(context.Background(), kafka.Message{
-			Key:   []byte(item.Link),
-			Value: jsonBytes,
-		})
-
-		if err != nil {
-			log.Printf("Failed to publish message: %v", err)
-		} else {
-			fmt.Printf("Published to Kafka: %s\n", item.Title)
-		}
-	}
+	log.Println("\n Ingestion complete. All feeds streamed to Kafka.")
 }
