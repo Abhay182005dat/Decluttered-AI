@@ -2,7 +2,7 @@ package main
 
 import (
 	"log"
-
+	"os"
 	"decluttered/backend/config"
 	"decluttered/backend/handlers"
 
@@ -28,10 +28,9 @@ func CORSMiddleware() gin.HandlerFunc {
 }
 
 func main() {
-	if err := godotenv.Load("../../.env"); err != nil {
-		if err := godotenv.Load(); err != nil {
-			log.Println("No .env file found, relying on system environment variables.")
-		}
+	if os.Getenv("DB_URI") == "" {
+		_ = godotenv.Load("../../.env")
+		_ = godotenv.Load(".env")
 	}
 	config.InitConnections()
 

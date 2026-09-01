@@ -8,6 +8,8 @@ from sentence_transformers import SentenceTransformer
 from qdrant_client import QdrantClient
 from qdrant_client.http.models import PointStruct, Distance, VectorParams
 from summarizer import generate_event_summary
+import threading
+from http.server import HTTPServer, BaseHTTPRequestHandler
 
 # 1. Load Root .env
 load_dotenv(dotenv_path="../../.env")
@@ -30,6 +32,21 @@ COLLECTION_NAME = os.getenv("QDRANT_COLLECTION", "news_articles")
 SIMILARITY_THRESHOLD = float(os.getenv("SIMILARITY_THRESHOLD", 0.82))
 
 
+
+# Minimal HTTP Server to satisfy Render Free Web Service health checks
+class HealthCheckHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.end_headers()
+        self.wfile.write(b"AI Pipeline Active")
+
+def run_health_check_server():
+    port = int(os.getenv("PORT", 10000))
+    server = HTTPServer(("0.0.0.0", port), HealthCheckHandler)
+    server.serve_forever()
+
+# Start HTTP server on a daemon thread
+threading.Thread(target=run_health_check_server, daemon=True).start()
 
 
 # 3. Initialize Embedding Model & Vector Client
