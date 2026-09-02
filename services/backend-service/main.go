@@ -45,9 +45,12 @@ func main() {
 		v1.GET("/events/:id", handlers.GetEventByID)
 		v1.GET("/market", handlers.GetMarketData)
 	}
-
-	log.Println("Starting Go Backend API Server on port 8080...")
-	if err := r.Run(":8080"); err != nil {
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8080" // Default port if not specified
+	}
+	log.Println("Starting Go Backend API Server on port " + port + "...")
+	if err := r.Run(":" + port); err != nil {
 		log.Fatalf("Server failed to run: %v", err)
 	}
 }
