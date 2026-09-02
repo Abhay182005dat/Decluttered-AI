@@ -1,7 +1,7 @@
 import os
 import psycopg2
 
-DB_URI = "postgresql://postgres:Abhi%40sonda31@127.0.0.1:5432/decluttered_db"
+DB_URI = os.getenv('DB_URI')
 
 def init_db():
     schema_path = os.path.join(os.path.dirname(__file__), "schema.sql")
