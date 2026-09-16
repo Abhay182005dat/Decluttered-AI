@@ -76,6 +76,7 @@ func main() {
 
 			msg := &sarama.ProducerMessage{
 				Topic: kafkaTopic,
+				Key: sarama.StringEncoder(article.Category),
 				Value: sarama.ByteEncoder(bytes),
 			}
 
@@ -83,7 +84,7 @@ func main() {
 			if err != nil {
 				log.Printf("⚠️ Failed to publish article [%s]: %v", article.Title, err)
 			} else {
-				log.Printf("✓ [KAFKA PUB] [%s] %s", article.SourceName, article.Title)
+				log.Printf("✓ [KAFKA PUB] [%s | %s] %s",article.Category, article.SourceName, article.Title)
 			}
 		}
 	}()

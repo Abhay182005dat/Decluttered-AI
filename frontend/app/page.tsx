@@ -1,14 +1,19 @@
 "use client";
 
 import { useEffect, useState, useMemo } from "react";
+import { useRouter } from "next/navigation";
 import { ChevronRight, Clock, Layers, RefreshCw } from "lucide-react";
 import { EventCluster, EventDetail } from "@/types/news";
 import { fetchNewsFeed, fetchEventDetail } from "@/lib/api";
 import { Header } from "@/components/Header";
 import { Sidebar } from "@/components/Sidebar";
 import { SummaryDetail } from "@/components/SummaryDetail";
+import { MarketTicker } from "@/components/MarketTicker";
 
 export default function Home() {
+  const router = useRouter();
+  const [authorized, setAuthorized] = useState(false);
+
   const [feed, setFeed] = useState<EventCluster[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
@@ -19,11 +24,36 @@ export default function Home() {
   const [selectedCategory, setSelectedCategory] = useState<string>("ALL");
   const [searchQuery, setSearchQuery] = useState<string>("");
 
+  // Auth & Onboarding Protection Guard
+  useEffect(() => {
+    const token = localStorage.getItem("decluttered_token");
+    const userRaw = localStorage.getItem("decluttered_user");
+
+    if (!token || !userRaw) {
+      router.push("/login");
+      return;
+    }
+
+    try {
+      const user = JSON.parse(userRaw);
+      if (!user.onboarding_completed) {
+        router.push("/onboarding");
+        return;
+      }
+      setAuthorized(true);
+    } catch (err) {
+      localStorage.removeItem("decluttered_token");
+      localStorage.removeItem("decluttered_user");
+      router.push("/login");
+    }
+  }, [router]);
+
   const loadFeed = async () => {
     setLoading(true);
     try {
-      const data = await fetchNewsFeed();
-      setFeed(data);
+      const res = await fetchNewsFeed();
+      const clusters = Array.isArray(res) ? res : Array.isArray(res.data) ? res.data : [];
+      setFeed(clusters);
     } catch (err) {
       console.error(err);
     } finally {
@@ -32,8 +62,10 @@ export default function Home() {
   };
 
   useEffect(() => {
-    loadFeed();
-  }, []);
+    if (authorized) {
+      loadFeed();
+    }
+  }, [authorized]);
 
   const handleSelectEvent = async (id: string) => {
     if (selectedEventId === id) {
@@ -56,10 +88,15 @@ export default function Home() {
   // Filter feed based on sidebar category & search input
   const filteredFeed = useMemo(() => {
     return feed.filter((item) => {
-      const matchesCategory =
-        selectedCategory === "ALL" ||
-        item.category.toLowerCase() === selectedCategory.toLowerCase();
-      
+      let matchesCategory = false;
+
+      if (selectedCategory === "ALL") {
+        matchesCategory = true;
+      } else if (selectedCategory === "MY_VECTORS") {
+        matchesCategory = (item as any).is_preferred === true;
+      } else {
+        matchesCategory = item.category.toLowerCase() === selectedCategory.toLowerCase();
+      }
       const matchesSearch =
         item.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
         (item.summary?.what_happened &&
@@ -68,6 +105,16 @@ export default function Home() {
       return matchesCategory && matchesSearch;
     });
   }, [feed, selectedCategory, searchQuery]);
+
+  // Block rendering until session verification completes
+  if (!authorized) {
+    return (
+      <div className="min-h-screen bg-[#0d0e11] flex items-center justify-center font-mono text-xs text-[#8b949e]">
+        <RefreshCw className="w-4 h-4 animate-spin text-[#ff6600] mr-2" />
+        Verifying session state...
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-[#0d0e11] text-[#c9d1d9] font-mono text-sm antialiased">
@@ -79,7 +126,10 @@ export default function Home() {
           onSelectCategory={setSelectedCategory}
           searchQuery={searchQuery}
           onSearchChange={setSearchQuery}
-        />
+        >
+          {/* Market Ticker inside sidebar directly */}
+          <MarketTicker />
+        </Sidebar>
 
         {/* Main Feed View */}
         <main className="flex-1 p-6">

@@ -125,7 +125,7 @@ for message in consumer:
         conn = psycopg2.connect(DB_URI)
 
     cur = conn.cursor()
-
+    category = article.get("category" , "technology").lower().strip()
     if search_results:
         # Link to existing event cluster
         cluster_id = search_results[0].payload.get("cluster_id")
@@ -137,7 +137,7 @@ for message in consumer:
 
         cur.execute(
             "INSERT INTO event_clusters (id, title, category) VALUES (%s, %s, %s)",
-            (cluster_id, title, article.get("category", "Technology"))
+            (cluster_id, title, category)
         )
 
         # Generate 4-part AI summary via Groq LLM
@@ -156,6 +156,8 @@ for message in consumer:
                     summary_data["why_it_matters"]
                 )
             )
+            import time
+            time.sleep(2)
         except Exception as e:
             print(f"  └─ ⚠️ Failed to generate summary: {e}")
 

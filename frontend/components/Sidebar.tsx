@@ -1,28 +1,23 @@
 "use client";
 
-import { 
-  Globe, 
-  Cpu, 
-  TrendingUp, 
-  ShieldAlert, 
-  Zap, 
-  Search
-} from "lucide-react";
-import { MarketTicker } from "@/components/MarketTicker"; // <-- Import
+import { Search, Compass, Zap, Cpu, TrendingUp, ShieldAlert, Globe, Sparkles } from "lucide-react";
 
 interface SidebarProps {
   selectedCategory: string;
   onSelectCategory: (cat: string) => void;
   searchQuery: string;
-  onSearchChange: (q: string) => void;
+  onSearchChange: (query: string) => void;
+  children?: React.ReactNode;
 }
 
 const CATEGORIES = [
-  { id: "ALL", label: "All Intelligence", icon: Globe },
-  { id: "Technology", label: "Technology", icon: Cpu },
-  { id: "Business", label: "Business & Markets", icon: TrendingUp },
-  { id: "Cybersecurity", label: "Cybersecurity", icon: ShieldAlert },
-  { id: "AI", label: "Artificial Intelligence", icon: Zap },
+  { id: "ALL", label: "All Intelligence", icon: Compass },
+  { id: "MY_VECTORS", label: "My Preferred Feed", icon: Sparkles },
+  { id: "technology", label: "Technology", icon: Zap },
+  { id: "ai", label: "Artificial Intelligence", icon: Cpu },
+  { id: "markets", label: "Markets & Finance", icon: TrendingUp },
+  { id: "cybersecurity", label: "Cybersecurity", icon: ShieldAlert },
+  { id: "climate", label: "Climate & Energy", icon: Globe },
 ];
 
 export function Sidebar({
@@ -30,56 +25,59 @@ export function Sidebar({
   onSelectCategory,
   searchQuery,
   onSearchChange,
+  children,
 }: SidebarProps) {
   return (
-    <aside className="w-64 shrink-0 border-r border-[#21262d] bg-[#0d0e11] min-h-[calc(100vh-3.5rem)] p-4 space-y-6 hidden md:block sticky top-14 self-start">
-      {/* Quick Search */}
-      <div className="space-y-2">
-        <label className="text-[11px] font-mono font-bold uppercase text-[#8b949e] tracking-wider block">
+    <aside className="w-64 border-r border-[#21262d] p-4 flex flex-col gap-6 font-mono text-xs select-none">
+      {/* Search Bar */}
+      <div>
+        <label className="block text-[10px] font-bold text-[#8b949e] uppercase tracking-wider mb-2">
           Search Feed
         </label>
         <div className="relative">
-          <Search className="w-3.5 h-3.5 absolute left-3 top-3 text-[#8b949e]" />
+          <Search className="w-3.5 h-3.5 absolute left-3 top-2.5 text-[#8b949e]" />
           <input
             type="text"
             placeholder="Filter by keyword..."
             value={searchQuery}
             onChange={(e) => onSearchChange(e.target.value)}
-            className="w-full bg-[#161b22] border border-[#30363d] focus:border-[#ff6600] rounded pl-9 pr-3 py-1.5 text-xs text-white placeholder-[#8b949e] outline-none font-mono transition-colors"
+            className="w-full bg-[#161b22] border border-[#21262d] focus:border-[#ff6600] outline-none text-[#c9d1d9] pl-8 pr-3 py-2 rounded text-xs"
           />
         </div>
       </div>
 
-      {/* Category Navigation */}
-      <div className="space-y-1">
-        <label className="text-[11px] font-mono font-bold uppercase text-[#8b949e] tracking-wider block px-1 mb-2">
+      {/* Dynamic Stream Categories */}
+      <div>
+        <label className="block text-[10px] font-bold text-[#8b949e] uppercase tracking-wider mb-2">
           Streams
         </label>
-        {CATEGORIES.map((cat) => {
-          const Icon = cat.icon;
-          const isActive = selectedCategory === cat.id;
-          return (
-            <button
-              key={cat.id}
-              onClick={() => onSelectCategory(cat.id)}
-              className={`w-full flex items-center justify-between px-3 py-2 rounded text-xs font-mono transition-colors ${
-                isActive
-                  ? "bg-[#ff6600]/10 text-[#ff6600] border border-[#ff6600]/30 font-bold"
-                  : "text-[#c9d1d9] hover:bg-[#161b22] hover:text-white"
-              }`}
-            >
-              <div className="flex items-center gap-2.5">
-                <Icon className={`w-4 h-4 ${isActive ? "text-[#ff6600]" : "text-[#8b949e]"}`} />
-                <span>{cat.label}</span>
-              </div>
-              {isActive && <span className="w-1.5 h-1.5 rounded-full bg-[#ff6600]" />}
-            </button>
-          );
-        })}
+        <div className="space-y-1">
+          {CATEGORIES.map((cat) => {
+            const Icon = cat.icon;
+            const isSelected = selectedCategory.toLowerCase() === cat.id.toLowerCase();
+            return (
+              <button
+                key={cat.id}
+                onClick={() => onSelectCategory(cat.id)}
+                className={`w-full flex items-center justify-between px-3 py-2 rounded transition-colors ${
+                  isSelected
+                    ? "bg-[#ff6600]/10 text-[#ff6600] font-bold border border-[#ff6600]/30"
+                    : "text-[#8b949e] hover:bg-[#161b22] hover:text-[#c9d1d9]"
+                }`}
+              >
+                <div className="flex items-center gap-2.5">
+                  <Icon className="w-4 h-4" />
+                  <span>{cat.label}</span>
+                </div>
+                {isSelected && <div className="w-1.5 h-1.5 rounded-full bg-[#ff6600]" />}
+              </button>
+            );
+          })}
+        </div>
       </div>
 
-      {/* Embedded Market Ticker */}
-      <MarketTicker />
+      {/* Market Ticker Slot */}
+      {children}
     </aside>
   );
 }

@@ -5,6 +5,7 @@ import (
 	"os"
 	"decluttered/backend/config"
 	"decluttered/backend/handlers"
+	"decluttered/backend/middleware"
 
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
@@ -41,13 +42,32 @@ func main() {
 
 	v1 := r.Group("/api/v1")
 	{
+		// Public News & Market Routes
 		v1.GET("/feed", handlers.GetNewsFeed)
 		v1.GET("/events/:id", handlers.GetEventByID)
 		v1.GET("/market", handlers.GetMarketData)
+
+		// Public Authentication Routes
+		v1.POST("/auth/google", handlers.HandleGoogleAuth)
+		v1.POST("/auth/register", handlers.HandleRegister)
+		v1.POST("/auth/login", handlers.HandleLogin)
+
+		// Protected User Routes (Requires JWT Header: "Authorization: Bearer <token>")
+		protected := v1.Group("/")
+		protected.Use(middleware.AuthMiddleware())
+		{
+			protected.GET("/user/me", func(c *gin.Context) {
+				userID, _ := c.Get("userID")
+				c.JSON(200, gin.H{"status": "authenticated", "user_id": userID})
+			})
+			// onboarding Interests Endpoint
+			protected.POST("/user/interests", handlers.HandleUpdateInterests)
+		}
 	}
+
 	port := os.Getenv("PORT")
 	if port == "" {
-		port = "8080" // Default port if not specified
+		port = "8080"
 	}
 	log.Println("Starting Go Backend API Server on port " + port + "...")
 	if err := r.Run(":" + port); err != nil {

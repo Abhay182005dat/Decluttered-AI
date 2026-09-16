@@ -4,7 +4,11 @@ import (
 	"encoding/json"
 	"net/http"
 	"time"
-
+	"strings"
+	"os"
+	"fmt"
+	"github.com/golang-jwt/jwt/v5"
+	"github.com/lib/pq"
 	"decluttered/backend/config"
 
 	"github.com/gin-gonic/gin"
@@ -23,14 +27,42 @@ type EventCluster struct {
 	Category     string   `json:"category"`
 	ArticleCount int      `json:"article_count"`
 	CreatedAt    string   `json:"created_at"`
+	IsPreferred  bool     `json:"is_preferred"`
 	Summary      *Summary `json:"summary,omitempty"`
 }
 
 // GET /api/v1/feed
+// GET /api/v1/feed
 func GetNewsFeed(c *gin.Context) {
-	cacheKey := "news_feed_latest"
+	var userInterests []string
+	cacheKey := "news_feed_public"
 
-	// 1. Check Redis Cache
+	// 1. Optional Auth Check: Extract user interests if JWT Token is present
+	authHeader := c.GetHeader("Authorization")
+	if authHeader != "" && strings.HasPrefix(authHeader, "Bearer ") {
+		tokenString := strings.TrimPrefix(authHeader, "Bearer ")
+		jwtSecret := []byte(os.Getenv("JWT_SECRET"))
+		if len(jwtSecret) == 0 {
+			jwtSecret = []byte("super-secret-key-change-me")
+		}
+
+		claims := &Claims{}
+		token, err := jwt.ParseWithClaims(tokenString, claims, func(token *jwt.Token) (interface{}, error) {
+			return jwtSecret, nil
+		})
+
+		if err == nil && token.Valid {
+			var rawInterests pq.StringArray
+			err := config.DB.QueryRow("SELECT interests FROM users WHERE id=$1", claims.UserID).Scan(&rawInterests)
+			if err == nil {
+				userInterests = []string(rawInterests)
+				// Create a user-specific cache key when interests exist
+				cacheKey = fmt.Sprintf("news_feed_user_%d", claims.UserID)
+			}
+		}
+	}
+
+	// 2. Check Redis Cache
 	cachedData, err := config.RDB.Get(config.Ctx, cacheKey).Result()
 	if err == nil {
 		var cachedFeed []EventCluster
@@ -41,17 +73,21 @@ func GetNewsFeed(c *gin.Context) {
 		}
 	}
 
-	// 2. Fetch from PostgreSQL
+	// Replace section #3 in GetNewsFeed (news.go)
 	query := `
 		SELECT ec.id, ec.title, ec.category, ec.article_count, ec.created_at,
-		       s.what_happened, s.why_it_happened, s.latest_updates, s.why_it_matters
+			s.what_happened, s.why_it_happened, s.latest_updates, s.why_it_matters,
+			CASE 
+				WHEN LOWER(ec.category) = ANY(SELECT LOWER(UNNEST($1::text[]))) THEN 2 
+				ELSE 1 
+			END AS match_score
 		FROM event_clusters ec
 		LEFT JOIN summaries s ON ec.id = s.cluster_id
-		ORDER BY ec.created_at DESC
-		LIMIT 20;
+		ORDER BY match_score DESC, ec.created_at DESC
+		LIMIT 40;
 	`
 
-	rows, err := config.DB.Query(query)
+	rows, err := config.DB.Query(query, pq.Array(userInterests))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -63,10 +99,11 @@ func GetNewsFeed(c *gin.Context) {
 		var ec EventCluster
 		var s Summary
 		var what, why, updates, matters *string
+		var matchScore int
 
 		err := rows.Scan(
 			&ec.ID, &ec.Title, &ec.Category, &ec.ArticleCount, &ec.CreatedAt,
-			&what, &why, &updates, &matters,
+			&what, &why, &updates, &matters, &matchScore,
 		)
 		if err != nil {
 			continue
@@ -79,11 +116,11 @@ func GetNewsFeed(c *gin.Context) {
 			s.WhyItMatters = *matters
 			ec.Summary = &s
 		}
-
+		ec.IsPreferred = matchScore > 1
 		feed = append(feed, ec)
 	}
 
-	// 3. Cache result in Redis for 60 seconds
+	// 4. Cache result in Redis (60s)
 	if jsonBytes, err := json.Marshal(feed); err == nil {
 		config.RDB.Set(config.Ctx, cacheKey, jsonBytes, 60*time.Second)
 	}
