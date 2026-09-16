@@ -52,7 +52,7 @@ export default function Home() {
     setLoading(true);
     try {
       const res = await fetchNewsFeed();
-      const clusters = Array.isArray(res) ? res : Array.isArray(res.data) ? res.data : [];
+      const clusters = res.data || [];
       setFeed(clusters);
     } catch (err) {
       console.error(err);

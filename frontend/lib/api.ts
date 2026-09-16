@@ -1,8 +1,8 @@
-import { EventCluster, EventDetail } from "@/types/news";
+import { EventDetail, FeedResponse } from "@/types/news";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080/api/v1";
 
-export async function fetchNewsFeed(): Promise<EventCluster[]> {
+export async function fetchNewsFeed(): Promise<FeedResponse> {
   const token = typeof window !== "undefined" ? localStorage.getItem("decluttered_token") : null;
   const headers: HeadersInit = {"Content-type": "application/json"};
   if (token) {

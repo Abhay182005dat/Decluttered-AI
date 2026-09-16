@@ -11,7 +11,13 @@ export interface EventCluster {
   category: string;
   article_count: number;
   created_at: string;
+  is_preferred?: boolean;
   summary?: Summary;
+}
+
+export interface FeedResponse {
+  status: string;
+  data: EventCluster[];
 }
 
 export interface Article {
