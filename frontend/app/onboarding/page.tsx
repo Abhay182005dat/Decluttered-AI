@@ -90,15 +90,15 @@ export default function OnboardingPage() {
   };
 
   return (
-    <div className="relative min-h-screen flex items-center justify-center p-4 font-mono select-none overflow-hidden">
+    <div className="relative min-h-screen max-w-full flex items-center justify-center p-3 sm:p-4 font-mono select-none overflow-hidden">
       <SpaceWarpBackground />
 
-      <div className="relative z-10 w-full max-w-xl bg-[#161b22]/90 backdrop-blur-md border border-[#21262d] rounded-2xl p-8 shadow-2xl space-y-6">
+      <div className="relative z-10 w-full max-w-md sm:max-w-xl bg-[#161b22]/90 backdrop-blur-md border border-[#21262d] rounded-2xl p-4 sm:p-8 shadow-2xl space-y-6">
         <div className="text-center space-y-2">
           <div className="inline-flex items-center gap-2 bg-[#ff6600]/10 border border-[#ff6600]/30 text-[#ff6600] px-3 py-1 rounded-full text-xs font-bold">
             <Sparkles className="w-3.5 h-3.5" /> PERSONALIZATION PIPELINE
           </div>
-          <h1 className="text-2xl font-bold text-white tracking-tight">
+          <h1 className="text-lg sm:text-2xl font-bold text-white tracking-tight">
             Select Your Signal Vectors
           </h1>
           <p className="text-xs text-[#8b949e] max-w-md mx-auto">
@@ -112,7 +112,7 @@ export default function OnboardingPage() {
           </div>
         )}
 
-        <div className="grid grid-cols-2 sm:grid-cols-2 gap-3 pt-2">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
           {AVAILABLE_TOPICS.map((topic) => {
             const isSelected = selectedTopics.includes(topic.id);
             return (
@@ -120,7 +120,7 @@ export default function OnboardingPage() {
                 key={topic.id}
                 type="button"
                 onClick={() => toggleTopic(topic.id)}
-                className={`flex items-center justify-between p-3.5 rounded-xl border text-left text-xs transition-all ${
+                className={`flex min-h-11 items-center justify-between p-3.5 rounded-xl border text-left text-xs transition-all ${
                   isSelected
                     ? "border-[#ff6600] bg-[#ff6600]/10 text-white"
                     : "border-[#21262d] bg-[#0d1117] text-[#8b949e] hover:border-[#30363d] hover:text-white"
@@ -149,7 +149,7 @@ export default function OnboardingPage() {
           <button
             onClick={handleSubmit}
             disabled={loading}
-            className="flex items-center gap-2 bg-[#ff6600] hover:bg-[#e65c00] text-black font-bold px-5 py-2.5 rounded-lg text-xs transition-transform active:scale-[0.98] shadow-lg shadow-orange-600/20"
+            className="flex min-h-11 items-center gap-2 bg-[#ff6600] hover:bg-[#e65c00] text-black font-bold px-5 py-2.5 rounded-lg text-xs transition-transform active:scale-[0.98] shadow-lg shadow-orange-600/20"
           >
             <span>{loading ? "Saving..." : "Build Intelligence Feed"}</span>
             <ArrowRight className="w-4 h-4" />

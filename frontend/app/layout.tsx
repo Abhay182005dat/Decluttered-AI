@@ -28,7 +28,7 @@ export default function RootLayout({
   return (
     <html lang="en"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialised`}>
-      <body className="min-h-full flex flex-col bg-[#0a0a0c] text-white">
+      <body className="min-h-full flex flex-col overflow-x-hidden bg-[#0a0a0c] text-white">
         <GoogleOAuthProvider clientId={clientId}>
           {children}
         </GoogleOAuthProvider>

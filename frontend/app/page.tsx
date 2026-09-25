@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
-import { ChevronRight, Clock, Layers, RefreshCw } from "lucide-react";
+import { ChevronRight, Clock, Layers, Menu, RefreshCw } from "lucide-react";
 import { EventCluster, EventDetail } from "@/types/news";
 import { fetchNewsFeed, fetchEventDetail } from "@/lib/api";
 import { Header } from "@/components/Header";
@@ -28,6 +28,7 @@ export default function Home() {
   // Sidebar Controls
   const [selectedCategory, setSelectedCategory] = useState<string>("ALL");
   const [searchQuery, setSearchQuery] = useState<string>("");
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   // Auth & Onboarding Protection Guard
   useEffect(() => {
@@ -155,22 +156,35 @@ export default function Home() {
   }
 
   return (
-    <div className="min-h-screen bg-[#0d0e11] text-[#c9d1d9] font-mono text-sm antialiased">
+    <div className="min-h-screen max-w-full overflow-x-hidden bg-[#0d0e11] text-[#c9d1d9] font-mono text-sm antialiased">
       <Header loading={loading} onRefresh={handleRefresh} />
 
-      <div className="max-w-7xl mx-auto flex">
+      <div className="max-w-7xl mx-auto flex w-full">
+        <button
+          type="button"
+          aria-label="Open feed navigation"
+          onClick={() => setSidebarOpen(true)}
+          className="fixed bottom-4 left-4 z-30 flex min-h-11 min-w-11 items-center justify-center rounded-full border border-[#30363d] bg-[#161b22] text-[#ff6600] shadow-lg md:hidden"
+        >
+          <Menu className="h-5 w-5" />
+        </button>
         <Sidebar
           selectedCategory={selectedCategory}
-          onSelectCategory={setSelectedCategory}
+          onSelectCategory={(category) => {
+            setSelectedCategory(category);
+            setSidebarOpen(false);
+          }}
           searchQuery={searchQuery}
           onSearchChange={setSearchQuery}
+          isOpen={sidebarOpen}
+          onClose={() => setSidebarOpen(false)}
         >
           {/* Market Ticker inside sidebar directly */}
           <MarketTicker />
         </Sidebar>
 
         {/* Main Feed View */}
-        <main className="flex-1 p-6">
+        <main className="min-w-0 flex-1 px-4 py-5 sm:px-6 lg:px-8">
           {loading ? (
             <div className="py-20 text-center text-[#8b949e] flex flex-col items-center gap-3">
               <RefreshCw className="w-6 h-6 animate-spin text-[#ff6600]" />
@@ -195,18 +209,18 @@ export default function Home() {
                   >
                     <div
                       onClick={() => handleSelectEvent(item.id)}
-                      className="p-4 cursor-pointer flex items-start gap-3"
+                      className="p-3 sm:p-4 cursor-pointer flex items-start gap-2 sm:gap-3"
                     >
                       <span className="text-[#8b949e] text-xs w-6 text-right font-bold pt-0.5">
                         {idx + 1}.
                       </span>
 
-                      <div className="flex-1 space-y-1">
-                        <h2 className="text-white font-medium hover:text-[#ff6600] transition-colors text-base leading-snug">
+                      <div className="min-w-0 flex-1 space-y-1">
+                        <h2 className="text-white font-medium hover:text-[#ff6600] transition-colors text-sm sm:text-base leading-snug break-words">
                           {item.title}
                         </h2>
 
-                        <div className="flex items-center gap-3 text-xs text-[#8b949e] pt-1">
+                        <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-xs text-[#8b949e] pt-1">
                           <span className="bg-[#21262d] text-[#c9d1d9] px-2 py-0.5 rounded text-[11px] font-sans uppercase font-semibold">
                             {item.category}
                           </span>
@@ -241,7 +255,7 @@ export default function Home() {
                   <button
                     onClick={handleLoadMore}
                     disabled={loadingMore}
-                    className="flex items-center gap-2 bg-[#21262d] hover:bg-[#30363d] border border-[#30363d] text-[#c9d1d9] font-medium px-6 py-2.5 rounded-lg text-xs transition-all disabled:opacity-50"
+                    className="flex min-h-11 items-center gap-2 bg-[#21262d] hover:bg-[#30363d] border border-[#30363d] text-[#c9d1d9] font-medium px-6 py-2.5 rounded-lg text-xs transition-all disabled:opacity-50"
                   >
                     {loadingMore ? (
                       <>

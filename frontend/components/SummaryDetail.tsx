@@ -18,9 +18,9 @@ export function SummaryDetail({ item, detail, loading }: SummaryDetailProps) {
   }
 
   return (
-    <div className="border-t border-[#21262d] p-5 bg-[#010409] space-y-5 rounded-b-lg">
+    <div className="border-t border-[#21262d] p-3 sm:p-5 bg-[#010409] space-y-5 rounded-b-lg">
       {item.summary && (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 font-sans text-sm">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 font-sans text-sm">
           <div className="bg-[#161b22] p-3.5 rounded border border-[#30363d] space-y-1">
             <span className="text-[#ff6600] font-mono text-xs uppercase font-bold flex items-center gap-1.5">
               <Sparkles className="w-3.5 h-3.5" /> What Happened
@@ -63,11 +63,11 @@ export function SummaryDetail({ item, detail, loading }: SummaryDetailProps) {
                 href={art.source_url}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex items-center justify-between p-2.5 bg-[#161b22] hover:bg-[#21262d] rounded border border-[#30363d] group transition-colors"
+                className="flex min-h-11 items-center justify-between gap-2 p-2.5 bg-[#161b22] hover:bg-[#21262d] rounded border border-[#30363d] group transition-colors"
               >
-                <div className="space-y-0.5">
+                <div className="min-w-0 space-y-0.5">
                   <span className="text-white text-xs group-hover:text-[#ff6600] transition-colors font-medium">
-                    {art.title}
+                    <span className="break-words">{art.title}</span>
                   </span>
                   <span className="text-[11px] text-[#8b949e] block font-mono">
                     Source: {art.source_name}

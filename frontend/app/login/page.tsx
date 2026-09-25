@@ -54,15 +54,15 @@ export default function AuthPage() {
   };
 
   return (
-    <div className="relative min-h-screen flex items-center justify-center p-4 font-mono select-none overflow-hidden">
+    <div className="relative min-h-screen max-w-full flex items-center justify-center p-3 sm:p-4 font-mono select-none overflow-hidden">
       <SpaceWarpBackground />
 
-      <div className="relative z-10 w-full max-w-md bg-[#161b22]/90 backdrop-blur-md border border-[#21262d] rounded-2xl p-8 shadow-2xl">
+      <div className="relative z-10 w-full max-w-md sm:max-w-xl bg-[#161b22]/90 backdrop-blur-md border border-[#21262d] rounded-2xl p-4 sm:p-8 shadow-2xl">
         <div className="text-center space-y-2 mb-6">
           <div className="inline-flex items-center gap-2 bg-[#ff6600]/10 border border-[#ff6600]/30 text-[#ff6600] px-3 py-1 rounded-full text-xs font-bold">
             <Sparkles className="w-3.5 h-3.5" /> DECLUTTERED INTEL
           </div>
-          <h1 className="text-2xl font-bold text-white tracking-tight">
+          <h1 className="text-lg sm:text-2xl font-bold text-white tracking-tight">
             {isSignUp ? "Create your account" : "Welcome back"}
           </h1>
         </div>
@@ -130,7 +130,7 @@ export default function AuthPage() {
           <button
             type="submit"
             disabled={loading}
-            className="w-full bg-[#ff6600] hover:bg-[#e65c00] text-black font-bold py-2.5 rounded-lg text-xs transition-transform active:scale-[0.98] mt-2 shadow-lg shadow-orange-600/20"
+            className="w-full min-h-11 bg-[#ff6600] hover:bg-[#e65c00] text-black font-bold py-2.5 rounded-lg text-xs transition-transform active:scale-[0.98] mt-2 shadow-lg shadow-orange-600/20"
           >
             {loading ? "Processing..." : isSignUp ? "Create Account" : "Sign In"}
           </button>
@@ -158,7 +158,7 @@ export default function AuthPage() {
               setIsSignUp(!isSignUp);
               setError("");
             }}
-            className="text-[#ff6600] hover:underline font-bold"
+            className="min-h-11 px-2 text-[#ff6600] hover:underline font-bold"
           >
             {isSignUp ? "Sign In" : "Sign Up"}
           </button>
@@ -167,7 +167,7 @@ export default function AuthPage() {
         <div className="mt-4 text-center">
           <Link
             href="/"
-            className="inline-flex items-center gap-1.5 text-xs text-[#8b949e] hover:text-white transition-colors"
+            className="inline-flex min-h-11 items-center gap-1.5 text-xs text-[#8b949e] hover:text-white transition-colors"
           >
             <ArrowLeft className="w-3.5 h-3.5" /> Return to Intelligence Feed
           </Link>
