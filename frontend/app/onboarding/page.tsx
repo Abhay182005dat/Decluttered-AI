@@ -2,8 +2,9 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { MeteorBackground } from "@/components/MeteorBackground";
+// import { MeteorBackground } from "@/components/MeteorBackground";
 import { Sparkles, Check, ArrowRight, ShieldCheck } from "lucide-react";
+import { SpaceWarpBackground } from "@/components/SpaceWarpBackground";
 
 const AVAILABLE_TOPICS = [
   { id: "technology", label: "Technology", icon: "⚡" },
@@ -90,7 +91,7 @@ export default function OnboardingPage() {
 
   return (
     <div className="relative min-h-screen flex items-center justify-center p-4 font-mono select-none overflow-hidden">
-      <MeteorBackground />
+      <SpaceWarpBackground />
 
       <div className="relative z-10 w-full max-w-xl bg-[#161b22]/90 backdrop-blur-md border border-[#21262d] rounded-2xl p-8 shadow-2xl space-y-6">
         <div className="text-center space-y-2">
