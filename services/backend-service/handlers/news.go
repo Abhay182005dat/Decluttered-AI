@@ -10,7 +10,7 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/lib/pq"
 	"decluttered/backend/config"
-
+	"strconv"
 	"github.com/gin-gonic/gin"
 )
 
@@ -35,7 +35,16 @@ type EventCluster struct {
 // GET /api/v1/feed
 func GetNewsFeed(c *gin.Context) {
 	var userInterests []string
-	cacheKey := "news_feed_public"
+	// get page parameter for pagination
+	pageStr := c.Query("page")
+	page, _ := strconv.Atoi(pageStr)
+	if page < 1 {
+		page = 1
+	}
+	limit := 20
+	offset := (page - 1) * limit
+
+	cacheKey := fmt.Sprintf("news_feed_page_%d", page)
 
 	// 1. Optional Auth Check: Extract user interests if JWT Token is present
 	authHeader := c.GetHeader("Authorization")
@@ -57,7 +66,7 @@ func GetNewsFeed(c *gin.Context) {
 			if err == nil {
 				userInterests = []string(rawInterests)
 				// Create a user-specific cache key when interests exist
-				cacheKey = fmt.Sprintf("news_feed_user_%d", claims.UserID)
+				cacheKey = fmt.Sprintf("news_feed_user_%d_page_%d", claims.UserID , page)
 			}
 		}
 	}
@@ -84,10 +93,10 @@ func GetNewsFeed(c *gin.Context) {
 		FROM event_clusters ec
 		LEFT JOIN summaries s ON ec.id = s.cluster_id
 		ORDER BY match_score DESC, ec.created_at DESC
-		LIMIT 40;
+		LIMIT $2 OFFSET $3;
 	`
 
-	rows, err := config.DB.Query(query, pq.Array(userInterests))
+	rows, err := config.DB.Query(query, pq.Array(userInterests), limit, offset)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return

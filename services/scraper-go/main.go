@@ -21,6 +21,10 @@ type ArticlePayload struct {
 	Category    string    `json:"category"`
 	PublishedAt time.Time `json:"published_at"`
 }
+const (
+	MaxItemsPerFeed = 4
+	PublisherWorkers = 10
+)
 
 func main() {
 	_ = godotenv.Load("../../.env")
@@ -42,6 +46,10 @@ func main() {
 
 	config := sarama.NewConfig()
 	config.Producer.Return.Successes = true
+	config.Producer.Return.Errors = true
+	// performance tuning : Enable batching for network efficiency
+	config.Producer.Flush.Frequency = 100 * time.Millisecond
+	config.Producer.Flush.MaxMessages = 50
 
 	// Dynamically attach TLS & SASL/PLAIN if cloud credentials are present (Aiven)
 	if kafkaUser != "" && kafkaPassword != "" {
@@ -62,39 +70,44 @@ func main() {
 	}
 	defer producer.Close()
 
-	log.Printf("🚀 Multi-Source Scraper Active. Ingesting %d feeds via Kafka [%s]...\n", len(targetFeeds), kafkaTopic)
+	log.Printf("Parallel Scraper Active. processing %d feeds with %d workers via Kafka [%s]...\n", len(targetFeeds), PublisherWorkers, kafkaTopic)
 
-	var wg sync.WaitGroup
 	articleChan := make(chan ArticlePayload, 100)
+	var wg sync.WaitGroup
+	
+	for w := 1; w <= PublisherWorkers; w++ {
+		wg.Add(1)
+		go func(workerID int) {
+			defer wg.Done()
+			for article := range articleChan {
+				bytes, err := json.Marshal(article)
+				if err != nil {
+					continue
+				}
 
-	go func() {
-		for article := range articleChan {
-			bytes, err := json.Marshal(article)
-			if err != nil {
-				continue
+				msg := &sarama.ProducerMessage{
+					Topic: kafkaTopic,
+					Key: sarama.StringEncoder(article.Category),
+					Value: sarama.ByteEncoder(bytes),
+				}
+
+				_, _, err = producer.SendMessage(msg)
+				if err != nil {
+					log.Printf("⚠️ Worker %d Failed to publish article [%s]: %v", workerID, article.Title, err)
+				} else {
+					log.Printf("✓ [WORKER %d KAFKA PUB] [%s | %s] %s", workerID, article.Category, article.SourceName, article.Title)
+				}
 			}
+		}(w)
+	}
 
-			msg := &sarama.ProducerMessage{
-				Topic: kafkaTopic,
-				Key: sarama.StringEncoder(article.Category),
-				Value: sarama.ByteEncoder(bytes),
-			}
-
-			_, _, err = producer.SendMessage(msg)
-			if err != nil {
-				log.Printf("⚠️ Failed to publish article [%s]: %v", article.Title, err)
-			} else {
-				log.Printf("✓ [KAFKA PUB] [%s | %s] %s",article.Category, article.SourceName, article.Title)
-			}
-		}
-	}()
-
+	var scraperWg sync.WaitGroup
 	fp := gofeed.NewParser()
 
 	for _, feed := range targetFeeds {
-		wg.Add(1)
+		scraperWg.Add(1)
 		go func(f FeedConfig) {
-			defer wg.Done()
+			defer scraperWg.Done()
 			log.Printf("Fetching stream: %s (%s)", f.Name, f.URL)
 
 			parsedFeed, err := fp.ParseURL(f.URL)
@@ -103,7 +116,10 @@ func main() {
 				return
 			}
 
-			for _, item := range parsedFeed.Items {
+			for i, item := range parsedFeed.Items {
+				if i >= MaxItemsPerFeed {
+					break
+				}
 				content := item.Description
 				if item.Content != "" {
 					content = item.Content
@@ -128,8 +144,8 @@ func main() {
 		}(feed)
 	}
 
-	wg.Wait()
+	scraperWg.Wait()
 	close(articleChan)
-
+	wg.Wait()
 	log.Println("\n Ingestion complete. All feeds streamed to Kafka.")
 }

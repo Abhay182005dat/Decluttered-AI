@@ -20,6 +20,11 @@ export default function Home() {
   const [eventDetail, setEventDetail] = useState<EventDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
 
+  // Pagination States
+  const [page, setPage] = useState<number>(1);
+  const [hasMore, setHasMore] = useState<boolean>(true);
+  const [loadingMore, setLoadingMore] = useState<boolean>(false);
+
   // Sidebar Controls
   const [selectedCategory, setSelectedCategory] = useState<string>("ALL");
   const [searchQuery, setSearchQuery] = useState<string>("");
@@ -48,24 +53,57 @@ export default function Home() {
     }
   }, [router]);
 
-  const loadFeed = async () => {
-    setLoading(true);
+  const loadFeed = async (pageNumber: number = 1) => {
+    if (pageNumber === 1) {
+      setLoading(true);
+    } else {
+      setLoadingMore(true);
+    }
+
     try {
-      const res = await fetchNewsFeed();
+      const res = await fetchNewsFeed(pageNumber);
       const clusters = res.data || [];
-      setFeed(clusters);
+
+      if (clusters.length < 20) {
+        setHasMore(false);
+      } else {
+        setHasMore(true);
+      }
+
+      if (pageNumber === 1) {
+        setFeed(clusters);
+      } else {
+        setFeed((prev) => {
+          const existingIds = new Set(feed.map((item) => item.id));
+          const uniqueClusters = clusters.filter((item) => !existingIds.has(item.id));
+          return [...prev, ...uniqueClusters];
+        });
+      }
     } catch (err) {
-      console.error(err);
+      console.error("Feed load error:", err);
     } finally {
       setLoading(false);
+      setLoadingMore(false);
     }
   };
 
   useEffect(() => {
     if (authorized) {
-      loadFeed();
+      setPage(1);
+      loadFeed(1);
     }
   }, [authorized]);
+
+  const handleRefresh = () => {
+    setPage(1);
+    loadFeed(1);
+  };
+
+  const handleLoadMore = () => {
+    const nextPage = page + 1;
+    setPage(nextPage);
+    loadFeed(nextPage);
+  };
 
   const handleSelectEvent = async (id: string) => {
     if (selectedEventId === id) {
@@ -93,7 +131,7 @@ export default function Home() {
       if (selectedCategory === "ALL") {
         matchesCategory = true;
       } else if (selectedCategory === "MY_VECTORS") {
-        matchesCategory = (item as any).is_preferred === true;
+        matchesCategory = item.is_preferred === true;
       } else {
         matchesCategory = item.category.toLowerCase() === selectedCategory.toLowerCase();
       }
@@ -118,7 +156,7 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-[#0d0e11] text-[#c9d1d9] font-mono text-sm antialiased">
-      <Header loading={loading} onRefresh={loadFeed} />
+      <Header loading={loading} onRefresh={handleRefresh} />
 
       <div className="max-w-7xl mx-auto flex">
         <Sidebar
@@ -196,6 +234,26 @@ export default function Home() {
                   </div>
                 );
               })}
+
+              {/* Pagination Controls */}
+              {hasMore && filteredFeed.length > 0 && (
+                <div className="pt-6 pb-12 flex justify-center">
+                  <button
+                    onClick={handleLoadMore}
+                    disabled={loadingMore}
+                    className="flex items-center gap-2 bg-[#21262d] hover:bg-[#30363d] border border-[#30363d] text-[#c9d1d9] font-medium px-6 py-2.5 rounded-lg text-xs transition-all disabled:opacity-50"
+                  >
+                    {loadingMore ? (
+                      <>
+                        <RefreshCw className="w-4 h-4 animate-spin text-[#ff6600]" />
+                        Loading...
+                      </>
+                    ) : (
+                      "Load More Stories"
+                    )}
+                  </button>
+                </div>
+              )}
             </div>
           )}
         </main>
